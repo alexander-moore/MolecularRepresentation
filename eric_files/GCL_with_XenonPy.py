@@ -10,6 +10,18 @@ print("printing")
 # In[ ]:
 
 
+run_node_level_XenonPy = False
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
 print("Starting Experiments!")
 
 import numpy as np
@@ -45,8 +57,16 @@ import timeit
 import os
 from datetime import datetime
 
+
+import pandas as pd
 from rdkit.Chem import PeriodicTable
 from rdkit import Chem
+from xenonpy.datatools import preset
+from xenonpy.descriptor import Compositions
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+from sklearn import preprocessing
+from xenonpy.datatools import preset
 
 device = 'cuda' if torch.cuda.is_available else 'cpu'
 
@@ -73,23 +93,24 @@ parameters['batch_size'] = 4096
 dataset = "QM9"
 
 #list of input features in QM9 dataset
-x_index = {0: 'H atom?',
-1: 'C atom?',
-2: 'N atom?',
-3: 'O atom?',
-4: 'F atom?',
+x_index = {0: 'H_atom?',
+1: 'C_atom?',
+2: 'N_atom?',
+3: 'O_atom?',
+4: 'F_atom?',
 5: 'atomic_number',
 6: 'aromatic',
 7: 'sp1',
 8: 'sp2',
 9: 'sp3',
 10: 'num_hs'}
-x_index_list = ['H atom?', 
-                'C atom?', 
-                'N atom?', 
-                'O atom?', 
-                'F atom?', 
-                'atomic_number', 'aromatic', 
+x_index_list = ['H_atom?', 
+                'C_atom?', 
+                'N_atom?', 
+                'O_atom?', 
+                'F_atom?', 
+                'atomic_number', 
+                'aromatic', 
                 'sp1',
                 'sp2',
                 'sp3',
@@ -338,6 +359,16 @@ big_val_loader = torch_geometric.loader.DataLoader(val_set, batch_size = int(1e9
 
 val_aug = A.RandomChoice([], num_choices = 0)
 
+XPy_df = preset.dataset_elements_completed #XenonPy basic atomic feature information
+
+
+
+
+# In[ ]:
+
+
+
+
 
 # In[ ]:
 
@@ -349,6 +380,16 @@ val_aug = A.RandomChoice([], num_choices = 0)
 
 
 
+
+
+# In[ ]:
+
+
+def node_transform_XenonPy(batch, XPy_df, x_index):
+    batch.x = pd.DataFrame(batch.x).astype("float")
+    batch.x = batch.x.rename(x_index, axis='columns')
+    batch.x = batch.x.merge(XPy_df, how='left', on='atomic_number')
+    return batch.x
 
 
 # In[ ]:
@@ -498,6 +539,11 @@ def train(parameters):
             batch.x = batch.x.float()#.to(device)
             #batch.edge_index = batch.edge_index.to(device)
             
+            #try doing XenonPy transformation here
+            
+            if run_node_level_XenonPy == True:
+                batch.x = node_transform_XenonPy(batch, XPy_df, x_index)
+                
             # Barlow - get 2 random views of batch
             #print(batch.x, batch.edge_index, batch.edge_attr)
             #print(aug, type(aug))
@@ -514,42 +560,19 @@ def train(parameters):
 
             epoch_losses.append(loss.data.item())
 
-        print('epoch train loss', sum(epoch_losses) / len(epoch_losses))
+        print('Epoch ', epoch, 'out of', n_epochs, 'training loss', sum(epoch_losses) / len(epoch_losses))
         tr_losses.append(sum(epoch_losses) / len(epoch_losses))
 
         if epoch % 4 == 0:
-
-            # Downstream supervised loss
-            
-#             for batch in big_train_loader: # take entire train set
-#                 with torch.no_grad():
-#                     # Embed training set under model
-#                     rep_tr, _ = model(val_aug(batch.x, batch.edge_index, batch.edge_attr), batch.batch.to(device))
-
-
-#                     for val_batch in val_loader:
-#                         # Embed validation set under model
-#                         rep_val, _ = model(val_aug(val_batch.x, val_batch.edge_index, val_batch.edge_attr), val_batch.batch.to(device))
-
-#                         # For each task in QM9
-#                         for tar_ind in range(batch.y.shape[1]):
-#                             # Fit a model on model representation of train set
-
-#                             #print(rep_tr.shape, batch.y[tar_ind].shap)
-#                             lm = LinearRegression().fit(rep_tr.cpu(), batch.y[:,tar_ind])
-#                             # Test the model on model repersentation of val set
-#                             tar_yhat = lm.predict(rep_val.cpu())
-#                             mse_met = mean_squared_error(val_batch.y[:,tar_ind], tar_yhat).item()
-#                             r2_met = r2_score(val_batch.y[:,tar_ind], tar_yhat)
-#                             #print(qm9_index[tar_ind], mse_met, r2_met)
-#                             transfer_mat[tar_ind, row_ind] = mse_met
-#                         row_ind += 1
 
             # VicReg Validation Loss
             val_loss = []
             for batch in val_loader:
                 with torch.no_grad():
                     # VicReg validation loss
+                    if run_node_level_XenonPy == True:
+                        batch.x = node_transform_XenonPy(batch, XPy_df, x_index)
+                    
                     b1 = aug(batch.x, batch.edge_index, batch.edge_attr)
                     b2 = aug(batch.x, batch.edge_index, batch.edge_attr)
                     r1, e1 = model(b1, batch.batch.to(device))
@@ -718,6 +741,7 @@ plt.show()
 # In[ ]:
 
 
+print("Training single augmentation models")
 mse_scores = torch.zeros((19, len(aug_strs)))
 for i_str, stri in enumerate(aug_strs):
     vec = torch.load(f'aug_sweep3-4/{stri}/val_loss.pt')
@@ -731,6 +755,10 @@ for i_str, stri in enumerate(aug_strs):
     for batch in big_train_loader: # take entire train set
         with torch.no_grad():
             # Embed training set under model
+            #would need XenonPy transformation here for pre-GCL XenonPy
+            if run_node_level_XenonPy == True:
+                batch.x = node_transform_XenonPy(batch, XPy_df, x_index)
+            
             rep_tr, _ = model(val_aug(batch.x, batch.edge_index, batch.edge_attr), batch.batch.to(device))
             if torch.cuda.is_available():
                 rep_tr = rep_tr.to("cpu")
@@ -738,22 +766,27 @@ for i_str, stri in enumerate(aug_strs):
             rep_tr.join(xenonpy_tr_df)
 
             val_tracker = 0
-            print("One")
+            val_batch_num = 1
             
             for val_batch in val_loader:
                 # Embed validation set under model
+                print("Training validation batch ", val_batch_num , " out of ", ceil(val_batch_size/val_n))
+                
+                if run_node_level_XenonPy == True:
+                    val_batch.x = node_transform_XenonPy(val_batch, XPy_df, x_index)
+                
                 rep_val, _ = model(val_aug(val_batch.x, val_batch.edge_index, val_batch.edge_attr), val_batch.batch.to(device))
                 if torch.cuda.is_available():
                     rep_val = rep_val.to("cpu")
                 rep_val = pd.DataFrame(rep_val.numpy())
                 rep_val.join(xenonpy_val_df.iloc[val_tracker:(val_tracker+val_batch_size)])
                 
-                print("val_batch: ", val_batch)
+               
                 
                 # For each task in QM9
                 for tar_ind in range(batch.y.shape[1]):
                     # Fit a model on model representation of train set
-                    print("tar_ind: ", tar_ind)
+                    
                     #print(rep_tr.shape, batch.y[tar_ind].shap)
                     lm = LinearRegression().fit(rep_tr, batch.y[:,tar_ind])
                     # Test the model on model repersentation of val set
@@ -763,11 +796,12 @@ for i_str, stri in enumerate(aug_strs):
                     #print(qm9_index[tar_ind], mse_met, r2_met)
                     mse_scores[tar_ind, i_str] = mse_met
         
-                    
+                val_batch_num += 1
                 val_tracker += val_batch_size
-        print("Five")
+        
 plt.legend()
 plt.show()
+print("Done training single augmentation models!")
 
 
 # In[ ]:
@@ -804,6 +838,8 @@ for i, row in enumerate(mse_scores):
 
 
 # For all-but-one-augmentation
+
+print("Starting training for all-but-one augmentation")
 mse_scores = torch.zeros((19, len(aug_strs)))
 rf_mse_scores = torch.zeros((19, len(aug_strs)))
 lgb_mse_scores = torch.zeros((19, len(aug_strs)))
@@ -825,6 +861,9 @@ for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
     for batch in big_train_loader: # take entire train set
         with torch.no_grad():
             # Embed training set under model
+            if run_node_level_XenonPy == True:
+                    batch.x = node_transform_XenonPy(batch, XPy_df, x_index)
+            
             rep_tr, _ = model(val_aug(batch.x, batch.edge_index, batch.edge_attr), batch.batch.to(device))
             if torch.cuda.is_available():
                 rep_tr = rep_tr.to("cpu")
@@ -836,6 +875,9 @@ for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
            
             for val_batch in big_val_loader: #take entire val set
                 # Embed validation set under model
+                if run_node_level_XenonPy == True:
+                    val_batch.x = node_transform_XenonPy(val_batch, XPy_df, x_index)
+                
                 rep_val, _ = model(val_aug(val_batch.x, val_batch.edge_index, val_batch.edge_attr), val_batch.batch.to(device))
                 if torch.cuda.is_available():
                     rep_val = rep_val.to("cpu")
@@ -867,8 +909,8 @@ for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
                     rf_mse_scores[tar_ind, i_str] = mse_met
                     print("RF MSE for ", qm9_index[tar_ind], ":", mse_met)
                     
-                    lgb_train = lgb.Dataset(rep_tr, batch.y[:,tar_ind])
-                    lgb_eval = lgb.Dataset(rep_val, val_batch.y[:,tar_ind], reference=lgb_train)
+                    lgb_train = lgb.Dataset(rep_tr, pd.DataFrame(batch.y[:,tar_ind]).astype("float"))
+                    lgb_eval = lgb.Dataset(rep_val, pd.DataFrame(val_batch.y[:,tar_ind]).astype("float"), reference=lgb_train)
                     gbm = lgb.train(lgbm_parameters['params'],
                                     lgb_train,
                                     num_boost_round=lgbm_parameters['num_boost_round'],
@@ -879,7 +921,7 @@ for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
                     lgb_mse_scores[tar_ind, i_str] = lgb_score
                     print("LGBM MSE for ", qm9_index[tar_ind], ":", lgb_score)
                 
-                    x_val = pd.DataFrame(rep_val.numpy())
+                    x_val = pd.DataFrame(rep_val)
                     y_tr = pd.DataFrame(batch.y[:,tar_ind]).astype("float")
                     means_vector = y_tr.mean(axis = 0)
                     rep_means_vectors = means_vector.repeat(x_val.shape[0]) #create a vector where each entry is the mean
@@ -891,7 +933,7 @@ for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
 plt.legend()
 plt.show()
 
-
+print("Done training all-but-one augmentation downstream models!")
 
 
 # In[ ]:
