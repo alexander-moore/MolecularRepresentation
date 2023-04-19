@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 print("printing")
 
 
-# In[ ]:
+# In[2]:
 
 
 run_node_level_XenonPy = False
@@ -19,7 +19,7 @@ run_node_level_XenonPy = False
 
 
 
-# In[ ]:
+# In[3]:
 
 
 print("Starting Experiments!")
@@ -71,7 +71,7 @@ from xenonpy.datatools import preset
 device = 'cuda' if torch.cuda.is_available else 'cpu'
 
 
-# In[ ]:
+# In[4]:
 
 
 #record start time
@@ -79,14 +79,14 @@ t_0 = timeit.default_timer()
 # call function
 
 
-# In[ ]:
+# In[5]:
 
 
 parameters = {}
 parameters['batch_size'] = 4096
 
 
-# In[ ]:
+# In[6]:
 
 
 #QM9 dataset list of input features and list of target features
@@ -139,7 +139,7 @@ qm9_index = {0: 'Dipole_moment',
 18: 'Rotational_constant_C'}
 
 
-# In[ ]:
+# In[7]:
 
 
 #parameters for GCL methods
@@ -244,7 +244,7 @@ augmentations_used['test_num_choices'] = test_num_choices
 periodic_table = Chem.GetPeriodicTable()
 
 
-# In[ ]:
+# In[8]:
 
 
 #parameters for downstream ML models
@@ -302,7 +302,7 @@ parameters_used['downstream_model_parameters'] = downstream_model_parameters
 
 
 
-# In[ ]:
+# In[9]:
 
 
 whole_dataset = QM9(root = 'data/')
@@ -373,6 +373,12 @@ XPy_df = preset.dataset_elements_completed #XenonPy basic atomic feature informa
 # In[ ]:
 
 
+print(xenonpy_tr_df)
+
+
+# In[ ]:
+
+
 
 
 
@@ -383,6 +389,24 @@ XPy_df = preset.dataset_elements_completed #XenonPy basic atomic feature informa
 
 
 # In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+print(XPy_df)
+
+
+# In[10]:
 
 
 def node_transform_XenonPy(batch, XPy_df, x_index):
@@ -399,6 +423,73 @@ def node_transform_XenonPy(batch, XPy_df, x_index):
 
 
 # In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+for batch in test_loader:
+    the = 1
+
+
+# In[ ]:
+
+
+batch.x = pd.DataFrame(batch.x).astype("float")
+
+
+# In[ ]:
+
+
+batch.x = batch.x.rename(x_index, axis='columns')
+
+
+# In[ ]:
+
+
+print(batch.x)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+batch.x = batch.x.merge(XPy_df, how='left', on='atomic_number')
+
+
+# In[ ]:
+
+
+print(batch.x)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[11]:
 
 
 qm9_index = {0: 'Dipole moment',
@@ -423,7 +514,7 @@ qm9_index = {0: 'Dipole moment',
 
 
 
-# In[ ]:
+# In[12]:
 
 
 from torch_geometric.nn import GCNConv
@@ -602,7 +693,7 @@ def trymkdir(path):
 
 
 
-# In[ ]:
+# In[13]:
 
 
 # Here is sample code for how to implement an "ablation" of 2-at-a-time augmentations
@@ -674,7 +765,7 @@ plt.show()
 
 
 
-# In[ ]:
+# In[14]:
 
 
 # Here is sample code for how to implement an "ablation" of 2-at-a-time augmentations
@@ -738,7 +829,7 @@ plt.show()
 
 
 
-# In[ ]:
+# In[15]:
 
 
 print("Training single augmentation models")
@@ -770,7 +861,7 @@ for i_str, stri in enumerate(aug_strs):
             
             for val_batch in val_loader:
                 # Embed validation set under model
-                print("Training validation batch ", val_batch_num , " out of ", ceil(val_batch_size/val_n))
+                print("Training validation batch ", val_batch_num , " out of ", math.ceil(val_n/val_batch_size))
                 
                 if run_node_level_XenonPy == True:
                     val_batch.x = node_transform_XenonPy(val_batch, XPy_df, x_index)
@@ -832,6 +923,29 @@ for i, row in enumerate(mse_scores):
 
 
 
+
+
+# In[ ]:
+
+
+mse_scores = torch.zeros((19, len(aug_strs)))
+rf_mse_scores = torch.zeros((19, len(aug_strs)))
+lgb_mse_scores = torch.zeros((19, len(aug_strs)))
+baseline_mse_scores = torch.zeros((19, len(aug_strs)))
+
+
+# In[ ]:
+
+
+for i_str, stri in enumerate(next(os.walk('aug_sweep3-4'))[1]):
+    print("i_str: ", i_str)
+    print("stri: ", stri)
+
+
+# In[ ]:
+
+
+print(error_causing_variable)
 
 
 # In[ ]:
