@@ -1,0 +1,1 @@
+{'dataset': 'QM9', 'hours': 3.39, 'minutes': 203.46, 'seconds': 12207.5}
